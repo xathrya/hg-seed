@@ -37,6 +37,8 @@ spec:
       fromDigest: sha256:51c70474c54bee1de40fb06811b0c052bd5521aed9a9087f564b42b151718707
     image:
       name: challenges/web/php-inclusion
+      registry: ghcr.io/xathrya/hg-seed/challenges-web-php-inclusion
+      digest: sha256:79306b6537b567d1aa3885732c38ebfcef90648ba43e1052c7014d38cca041d4
     ports:
     - name: http
       container: 80

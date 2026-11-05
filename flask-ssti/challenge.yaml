@@ -33,6 +33,8 @@ spec:
         fromDigest: sha256:ae82e9e22e528bbc3c86bd8d34739f74d1a8c59735ac898005c8e6fd8d3d0136
       image:
         name: challenges/web/flask-ssti
+        registry: ghcr.io/xathrya/hg-seed/challenges-web-flask-ssti
+        digest: sha256:2b030a10a1f22f2e007e5d5a999f6c7747c17e729be5f660c770c9d5f9c38541
       ports:
         - name: http
           container: 5000

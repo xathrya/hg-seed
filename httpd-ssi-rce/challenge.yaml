@@ -38,6 +38,8 @@ spec:
       fromDigest: sha256:51c70474c54bee1de40fb06811b0c052bd5521aed9a9087f564b42b151718707
     image:
       name: challenges/web/httpd-ssi-rce
+      registry: ghcr.io/xathrya/hg-seed/challenges-web-httpd-ssi-rce
+      digest: sha256:e43b914ddc3b32e8d8f227192513766cfe9d859edfb974533b8a309b49a38f11
     ports:
     - name: http
       container: 80

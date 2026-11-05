@@ -38,6 +38,8 @@ spec:
       fromDigest: sha256:ae82e9e22e528bbc3c86bd8d34739f74d1a8c59735ac898005c8e6fd8d3d0136
     image:
       name: challenges/web/python-unpickle
+      registry: ghcr.io/xathrya/hg-seed/challenges-web-python-unpickle
+      digest: sha256:9480f28b96ea0441800f6796b6f75829bb92ba1f834f003abe78fdc7eba3a537
     ports:
     - name: http
       container: 5000

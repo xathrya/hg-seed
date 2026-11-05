@@ -38,6 +38,8 @@ spec:
       fromDigest: sha256:ef48a3b4d38046c6bf13a89c38b29ed5c2cf063dfc39f8839b92326585f8659f
     image:
       name: challenges/web/php-fpm
+      registry: ghcr.io/xathrya/hg-seed/challenges-web-php-fpm
+      digest: sha256:dd37518e32d85bce4933316e76e16a18c13cff05c8b113054c9d7f0476e5e8b7
     ports:
     - name: fastcgi
       container: 9000
