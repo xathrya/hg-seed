@@ -18,7 +18,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install hg toolkit
-        run: pip install hg-toolkit
+        run: |
+          git clone --depth 1 https://github.com/hunterground/hg-toolkit.git "$RUNNER_TEMP/hg-toolkit"
+          pip install "$RUNNER_TEMP/hg-toolkit"
       - name: Check docker
         run: docker buildx version
       - name: Log in to GHCR
