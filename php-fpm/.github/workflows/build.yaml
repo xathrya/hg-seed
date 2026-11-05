@@ -1,0 +1,192 @@
+name: build
+
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install hg toolkit
+        run: pip install hg-toolkit
+      - name: Check docker
+        run: docker buildx version
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull base images
+        run: |
+          set -eu
+          hg_pull_bases() {
+            root="$1"
+            python3 - "$root" <<'EOF'
+          import sys
+          from pathlib import Path
+
+          import yaml
+
+          from hg.catalog import base_for_image, builder_for_image
+          from hg.lint import parse_dockerfile
+          from hg.pull import pull_bases, pull_builders
+
+          root = Path(sys.argv[1]).resolve()
+          manifest = yaml.safe_load((root / "challenge.yaml").read_text(encoding="utf-8"))
+          spec = manifest.get("spec") or {}
+          members = spec.get("services") or spec.get("hosts") or []
+          froms: set[str] = set()
+          for member in members:
+              build = member.get("build") if isinstance(member, dict) else None
+              if not isinstance(build, dict):
+                  continue
+              context = (root / str(build.get("context", "."))).resolve()
+              dockerfile = context / str(build.get("dockerfile") or "Dockerfile")
+              info = parse_dockerfile(dockerfile.read_text(encoding="utf-8"))
+              froms.update(info.from_images)
+          bases = sorted({
+              base.name for image in froms
+              if (base := base_for_image(image)) is not None
+          })
+          builders = sorted({
+              builder.name for image in froms
+              if (builder := builder_for_image(image)) is not None
+          })
+          missing: list[str] = []
+          if bases:
+              print("pulling bases:", " ".join(bases))
+              missing.extend(pull_bases(bases).missing)
+          if builders:
+              print("pulling builders:", " ".join(builders))
+              missing.extend(pull_builders(builders).missing)
+          if missing:
+              raise SystemExit("cannot fetch image(s): " + ", ".join(missing))
+          EOF
+          }
+          hg_pull_bases .
+      - name: Build challenge
+        run: hg challenge build --path .
+      - name: Push to GHCR and pin digests
+        run: |
+          set -eu
+          hg_push_pin() {
+            root="$1"
+            manifest="$root/challenge.yaml"
+            members="$(python3 -c "
+          import sys, yaml
+          manifest = yaml.safe_load(open(sys.argv[1]))
+          spec = manifest.get('spec') or {}
+          members = spec.get('services') or spec.get('hosts') or []
+          for member in members:
+              if isinstance(member, dict) and isinstance(member.get('build'), dict):
+                  image = member.get('image') or {}
+                  logical = image.get('name')
+                  if isinstance(logical, str) and logical:
+                      print(logical)
+          " "$manifest")"
+            if [ -z "$members" ]; then
+              echo "static challenge; nothing to push"
+              return 0
+            fi
+            version="$(python3 -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['metadata']['version'])" "$manifest")"
+            owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+            repo="${{ github.event.repository.name }}"
+            for logical in $members; do
+              flat="$(echo "$logical" | tr '/' '-')"
+              remote="ghcr.io/$owner/$repo/$flat:$version"
+              echo "pushing $remote"
+              docker tag "$logical:local" "$remote"
+              docker push "$remote"
+              digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$remote" || true)"
+              if [ -z "$digest" ]; then
+                digest="$(docker image inspect --format '{{json .RepoDigests}}' "$remote" | python3 -c "
+          import json, sys
+          repo = sys.argv[1]
+          for item in json.load(sys.stdin):
+              name, _, value = item.rpartition('@')
+              if value.startswith('sha256:') and (name == repo or name.endswith('/' + repo)):
+                  print(value)
+                  break
+          " "${remote%:*}")"
+              fi
+              if [ -z "$digest" ]; then
+                echo "no digest recorded for $remote" >&2
+                exit 1
+              fi
+              python3 - "$manifest" "$logical" "${remote%:*}" "$digest" <<'EOF'
+          import re
+          import sys
+          path, logical, registry, digest = sys.argv[1:5]
+          with open(path, encoding="utf-8") as fh:
+              text = fh.read()
+          newline = "\r\n" if "\r\n" in text else "\n"
+          ends = text.endswith(("\n", "\r\n"))
+          lines = text.splitlines()
+          pattern = re.compile(
+              rf"^(\s*)name:\s*(['\"]?){re.escape(logical)}\2\s*(?:#.*)?$"
+          )
+          matches = [index for index, line in enumerate(lines) if pattern.match(line)]
+          if len(matches) != 1:
+              raise SystemExit(f"cannot find image.name {logical!r} in {path}")
+          index = matches[0]
+          indent = pattern.match(lines[index]).group(1)
+          stripped = [line.strip() for line in lines]
+          image_at = next(
+              i for i in range(index, -1, -1)
+              if stripped[i] == "image:" or stripped[i].startswith("image:")
+          )
+          image_indent = lines[image_at][: len(lines[image_at]) - len(lines[image_at].lstrip())]
+          end = image_at + 1
+          while end < len(lines):
+              line = lines[end]
+              if not line.strip() or line.strip().startswith("#"):
+                  end += 1
+                  continue
+              line_indent = line[: len(line) - len(line.lstrip())]
+              if len(line_indent) <= len(image_indent):
+                  break
+              end += 1
+          key = re.compile(rf"^{re.escape(indent)}(?:registry|digest):")
+          kept = [
+              line for cursor, line in enumerate(lines)
+              if not (image_at < cursor < end and key.match(line))
+          ]
+          name_at = next(cursor for cursor, line in enumerate(kept) if pattern.match(line))
+          kept[name_at + 1:name_at + 1] = [
+              f"{indent}registry: {registry}",
+              f"{indent}digest: {digest}",
+          ]
+          body = newline.join(kept)
+          if ends:
+              body += newline
+          with open(path, "w", encoding="utf-8") as fh:
+              fh.write(body)
+          EOF
+              echo "pinned $logical -> ${remote%:*}@$digest"
+            done
+          }
+          hg_push_pin .
+      - name: Commit pins
+        run: |
+          set -eu
+          if git diff --quiet -- challenge.yaml; then
+            echo "pins unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add challenge.yaml
+          git commit -m "Pin GHCR digests [skip ci]"
+          git push
+

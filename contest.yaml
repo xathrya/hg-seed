@@ -1,0 +1,27 @@
+apiVersion: hg.contest/v1
+kind: Contest
+metadata:
+  id: hg-seed
+  title: HunterGround Seed
+  description: Seed the HunterGround ecosystem for testing.
+  type: open
+spec:
+  startsAt: '2026-12-01T00:00:00Z'
+  endsAt: '2026-12-03T00:00:00Z'
+  visibility: draft
+  challenges:
+    - path: flask-ssti
+      points: 100
+      sortOrder: 1
+    - path: php-inclusion
+      points: 150
+      sortOrder: 2
+    - path: python-unpickle
+      points: 200
+      sortOrder: 3
+    - path: httpd-ssi-rce
+      points: 250
+      sortOrder: 4
+    - path: php-fpm
+      points: 300
+      sortOrder: 5

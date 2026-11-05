@@ -1,0 +1,59 @@
+apiVersion: hg.challenge/v1
+kind: Challenge
+metadata:
+  id: php-inclusion
+  title: PHP Local File Inclusion RCE with PHPINFO
+  category: web
+  description: PHP Local File Inclusion RCE with PHPINFO. Converted from vulhub php/inclusion.
+  difficulty: 1
+  author: xathrya
+  value: 100
+  state: hidden
+  version: '1'
+  source: php/inclusion
+spec:
+  runtime: container
+  spawn: image
+  platform:
+  - linux/amd64
+  - linux/arm64
+  topics:
+  - RCE
+  - Path Traversal
+  flags:
+  - id: flag
+    type: dynamic
+    path: /app/flag.txt
+    owner: ctf:ctf
+    mode: '0400'
+    service: web
+  scripts:
+    test: private/solve.sh
+  services:
+  - name: web
+    build:
+      context: services/web
+      dockerfile: Dockerfile
+      fromDigest: sha256:51c70474c54bee1de40fb06811b0c052bd5521aed9a9087f564b42b151718707
+    image:
+      name: challenges/web/php-inclusion
+    ports:
+    - name: http
+      container: 80
+      protocol: tcp
+      publish: true
+    health:
+      type: http
+      port: 80
+      path: /
+    resources:
+      memoryMb: 128
+      cpuMhz: 200
+  networks:
+  - name: default
+    internal: true
+    members:
+    - web
+  player:
+    entry: web.http
+    connection: '{url}'

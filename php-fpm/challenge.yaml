@@ -1,0 +1,59 @@
+apiVersion: hg.challenge/v1
+kind: Challenge
+metadata:
+  id: php-fpm
+  title: PHP-FPM FastCGI Unauthorized Access Leads to Remote Code Execution
+  category: web
+  description: PHP-FPM FastCGI Unauthorized Access Leads to Remote Code Execution.
+    Converted from vulhub php/fpm.
+  difficulty: 1
+  author: xathrya
+  value: 100
+  state: hidden
+  version: '1'
+  source: php/fpm
+spec:
+  runtime: container
+  spawn: image
+  platform:
+  - linux/amd64
+  - linux/arm64
+  topics:
+  - RCE
+  - Auth Bypass
+  flags:
+  - id: flag
+    type: dynamic
+    path: /app/flag.txt
+    owner: ctf:ctf
+    mode: '0400'
+    service: web
+  scripts:
+    test: private/solve.sh
+  services:
+  - name: web
+    build:
+      context: services/web
+      dockerfile: Dockerfile
+      fromDigest: sha256:ef48a3b4d38046c6bf13a89c38b29ed5c2cf063dfc39f8839b92326585f8659f
+    image:
+      name: challenges/web/php-fpm
+    ports:
+    - name: fastcgi
+      container: 9000
+      protocol: tcp
+      publish: true
+    health:
+      type: tcp
+      port: 9000
+    resources:
+      memoryMb: 128
+      cpuMhz: 200
+  networks:
+  - name: default
+    internal: true
+    members:
+    - web
+  player:
+    entry: web.fastcgi
+    connection: 'nc {host} {port}'
